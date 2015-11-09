@@ -22,7 +22,8 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ether_types
 from ryu.lib.packet import ipv4
-import hashlib
+from varfile import *
+#import hashlib
 
 
 class SimpleSwitch13(app_manager.RyuApp):
@@ -42,7 +43,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
                                     priority=priority, match=match,
                                     instructions=inst, cookie=hash_ip)
-            self.logger.info("buffer id: %s", buffer_id)
+            # self.logger.info("buffer id: %s", buffer_id)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
@@ -93,8 +94,8 @@ class SimpleSwitch13(app_manager.RyuApp):
             ip_pkt = pkt.get_protocols(ipv4.ipv4)[0]
             ip_src = ip_pkt.src
             ip_dst = ip_pkt.dst
-            self.logger.info("ip_src: %s, ip_dst: %s", ip_src, ip_dst)
-            self.logger.info("sum: %s",ip_src+ip_dst)
+            # self.logger.info("ip_src: %s, ip_dst: %s", ip_src, ip_dst)
+            # self.logger.info("sum: %s",ip_src+ip_dst)
             ip_sum = ip_src+ip_dst #sum of src and dst
 
 
