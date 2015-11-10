@@ -7,6 +7,7 @@ from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from varfile import *
+import db
 import time
 
 start_time = time.time()
@@ -16,7 +17,7 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
     cookielist = [] #list to keep flow/cookie stat
     pktlist = []
     bytelist = []
-    byteprevious=[0] #byte increment for every flow stat reply
+    byteprevious=[] #byte increment for every flow stat reply
 
     def __init__(self, *args, **kwargs):
         super(SimpleMonitor, self).__init__(*args, **kwargs)
@@ -41,14 +42,15 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
             for dp in self.datapaths.values():
                 self._request_stats(dp)
             hub.sleep(monperiod)
-            print "cookie_id " + str(self.cookielist)
-            print "byte " + str(self.bytelist)
-            print "packet_num " + str(self.pktlist)
-            print("--- %s seconds ---" % (time.time() - start_time))
-            if self.bytelist:
-                # print self.byteprevious
-                print str(abs(self.byteprevious[0]-self.bytelist[0]))+" increment"
-                print str(self.byteprevious[0]/monperiod/1000000)+" Mbps"
+            # print "cookie_id " + str(self.cookielist)
+            # print "byte " + str(self.bytelist)
+            # print "packet_num " + str(self.pktlist)
+            # print("--- %s seconds ---" % (time.time() - start_time))
+            # if self.bytelist:
+                # print str(self.byteprevious[0])+"byteprevious"
+                # print str(self.bytelist[0])+"bytelist"
+                # print str(abs(self.byteprevious[0]-self.bytelist[0]))+" increment"
+                # print str(self.byteprevious[0]/monperiod/1000000)+" Mbps"
             print "====================="
 
     def _request_stats(self, datapath):
@@ -79,14 +81,24 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
             #                  stat.packet_count, stat.byte_count, stat.cookie)
 
             #add statistic
-            if stat.cookie in self.cookielist:
-                self.byteprevious[self.cookielist.index(stat.cookie)]=self.bytelist[self.cookielist.index(stat.cookie)]
-                self.cookielist[self.cookielist.index(stat.cookie)] = stat.cookie
-                self.pktlist[self.cookielist.index(stat.cookie)] = stat.packet_count
-                self.bytelist[self.cookielist.index(stat.cookie)] = stat.byte_count
+            # print "==="
+            if db.fidcheck(stat.cookie, ev.msg.datapath.id):
+            # if stat.cookie in self.cookielist:
+                print stat.cookie
+                db.updatedb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
+                # index = self.cookielist.index(stat.cookie)
+                # self.byteprevious[index]=self.bytelist[index]
+                # self.cookielist[index] = stat.cookie
+                # self.pktlist[index] = stat.packet_count
+                # self.bytelist[index] = stat.byte_count
+                # print str(self.byteprevious[0])+"byteprevious"
+                # print str(self.bytelist[0])+"bytelist"
+                # print "---"
             else:
-                self.cookielist.append(stat.cookie)
-                self.pktlist.append(stat.packet_count)
-                self.bytelist.append(stat.byte_count)
-                self.byteprevious.append(stat.byte_count)
+                db.insertdb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
+            #     self.cookielist.append(stat.cookie)
+            #     self.pktlist.append(stat.packet_count)
+            #     self.bytelist.append(stat.byte_count)
+            #     self.byteprevious.append(stat.byte_count)
+            #     print "////"
 
