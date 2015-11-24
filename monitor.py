@@ -9,15 +9,13 @@ from ryu.lib import hub
 from varfile import *
 import db
 import time
+import rest_qos
+import rest_conf_switch
+import thread
 
 start_time = time.time()
 
 class SimpleMonitor(simple_switch_13.SimpleSwitch13):
-
-    cookielist = [] #list to keep flow/cookie stat
-    pktlist = []
-    bytelist = []
-    byteprevious=[] #byte increment for every flow stat reply
 
     def __init__(self, *args, **kwargs):
         super(SimpleMonitor, self).__init__(*args, **kwargs)
@@ -37,23 +35,58 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
                 self.logger.debug('unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
 
+
+    def send_flow_mod(self, datapath):
+        ofp = datapath.ofproto
+        ofp_parser = datapath.ofproto_parser
+
+        cookie = cookie_mask = 0
+        table_id = 0
+        idle_timeout = hard_timeout = 0
+        priority = 32768
+        buffer_id = ofp.OFP_NO_BUFFER
+        match = ofp_parser.OFPMatch(in_port=1, eth_dst='aa:ff:ff:ff:ff:ff')
+        # actions = [ofp_parser.OFPActionOutput(ofp.OFPP_NORMAL, 0)]
+        actions = [ofp_parser.OFPActionSetQueue(1), ofp_parser.OFPActionOutput(2)]
+
+        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                 actions)]
+        req = ofp_parser.OFPFlowMod(datapath, cookie, cookie_mask,
+                                    table_id, ofp.OFPFC_ADD,
+                                    idle_timeout, hard_timeout,
+                                    priority, buffer_id,
+                                    ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                    ofp.OFPFF_SEND_FLOW_REM,
+                                    match, inst)
+        datapath.send_msg(req)
+
+
+    def _monitor2(self):
+        while True:
+            print("second_thread")
+            # db.printdb()
+            db.bytecheck()
+            hub.sleep(2)
+
     def _monitor(self):
+        """
+        executing request_stats every monperiod, stated in varfile.py.
+        using for to iterate every switches
+        """
         while True:
             for dp in self.datapaths.values():
+                # print dp
                 self._request_stats(dp)
+                self.send_flow_mod(dp)
             hub.sleep(monperiod)
-            # print "cookie_id " + str(self.cookielist)
-            # print "byte " + str(self.bytelist)
-            # print "packet_num " + str(self.pktlist)
+            # print "====================="
             # print("--- %s seconds ---" % (time.time() - start_time))
-            # if self.bytelist:
-                # print str(self.byteprevious[0])+"byteprevious"
-                # print str(self.bytelist[0])+"bytelist"
-                # print str(abs(self.byteprevious[0]-self.bytelist[0]))+" increment"
-                # print str(self.byteprevious[0]/monperiod/1000000)+" Mbps"
-            print "====================="
 
     def _request_stats(self, datapath):
+        """
+        sending stat request to switch
+        :param datapath:
+        """
         self.logger.debug('send stats request: %016x', datapath.id)
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -66,6 +99,11 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
+        """
+        receive flow_stat reply, then insert into database.
+        entry is considered unique for cookie-datapath pair
+        :param ev:
+        """
         body = ev.msg.body
 
             # self.logger.info('datapath         '
@@ -80,25 +118,11 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
             #                  stat.instructions[0].actions[0].port,
             #                  stat.packet_count, stat.byte_count, stat.cookie)
 
-            #add statistic
-            # print "==="
+            #check if the entry is already exists, if not create new entry
+
             if db.fidcheck(stat.cookie, ev.msg.datapath.id):
-            # if stat.cookie in self.cookielist:
-                print stat.cookie
+                #print stat.packet_count
                 db.updatedb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
-                # index = self.cookielist.index(stat.cookie)
-                # self.byteprevious[index]=self.bytelist[index]
-                # self.cookielist[index] = stat.cookie
-                # self.pktlist[index] = stat.packet_count
-                # self.bytelist[index] = stat.byte_count
-                # print str(self.byteprevious[0])+"byteprevious"
-                # print str(self.bytelist[0])+"bytelist"
-                # print "---"
             else:
                 db.insertdb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
-            #     self.cookielist.append(stat.cookie)
-            #     self.pktlist.append(stat.packet_count)
-            #     self.bytelist.append(stat.byte_count)
-            #     self.byteprevious.append(stat.byte_count)
-            #     print "////"
 
