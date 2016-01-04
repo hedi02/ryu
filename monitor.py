@@ -12,6 +12,8 @@ import time
 import rest_qos
 import rest_conf_switch
 import thread
+import subprocess
+
 
 start_time = time.time()
 
@@ -21,6 +23,7 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
         super(SimpleMonitor, self).__init__(*args, **kwargs)
         self.datapaths = {}
         self.monitor_thread = hub.spawn(self._monitor)
+        #self.monitor_thread = hub.spawn(self._monitor2)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -64,7 +67,7 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
     def _monitor2(self):
         while True:
             print("second_thread")
-            # db.printdb()
+            db.printdb()
             db.bytecheck()
             hub.sleep(2)
 
@@ -79,8 +82,8 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
                 self._request_stats(dp)
                 self.send_flow_mod(dp)
             hub.sleep(monperiod)
-            # print "====================="
-            # print("--- %s seconds ---" % (time.time() - start_time))
+            #print "====================="
+            #print("--- %s seconds ---" % (time.time() - start_time))
 
     def _request_stats(self, datapath):
         """
@@ -119,10 +122,13 @@ class SimpleMonitor(simple_switch_13.SimpleSwitch13):
             #                  stat.packet_count, stat.byte_count, stat.cookie)
 
             #check if the entry is already exists, if not create new entry
-
             if db.fidcheck(stat.cookie, ev.msg.datapath.id):
-                #print stat.packet_count
-                db.updatedb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
+                current_th = (stat.byte_count - db.read_stat(stat.cookie, ev.msg.datapath.id))/monperiod
+                #print "stat.byte_count "+ str(stat.byte_count)
+                print str(stat.cookie) + " " + str(ev.msg.datapath.id) + " "     + str(current_th/1000) + "kbps"
+                db.update_stat(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
+                #insert throughput (kbps) based on current and previous bytes
+                db.insert_throughput(stat.cookie, ev.msg.datapath.id, current_th/1000)
             else:
-                db.insertdb(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
-
+                db.insert_stat(stat.cookie, ev.msg.datapath.id, stat.byte_count, stat.packet_count)
+                db.insert_throughput(stat.cookie, ev.msg.datapath.id, None)

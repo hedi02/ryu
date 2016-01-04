@@ -1,1 +1,1 @@
-monperiod=1
+monperiod=2
